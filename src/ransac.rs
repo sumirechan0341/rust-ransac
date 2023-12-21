@@ -1,6 +1,10 @@
 use crate::plane3d::Plane;
 use crate::point3d::Point3D;
 use crate::point_cloud::PointCloud;
+use ndarray::prelude::*;
+use ndarray::{arr3, Array, Array3};
+use ndarray_linalg::cholesky::*;
+use ndarray_linalg::SVD;
 use rand::Rng;
 
 pub fn ransac(point_cloud: PointCloud, threshold: f32, iterations: usize) -> (Plane, Vec<Point3D>) {
@@ -42,6 +46,7 @@ pub fn ransac(point_cloud: PointCloud, threshold: f32, iterations: usize) -> (Pl
                 }
             }
         }
+
         // 平面に属する点が多ければ更新
         if plane_size > best_plane_size {
             point_in_best_plane = point_in_plane;
@@ -49,5 +54,20 @@ pub fn ransac(point_cloud: PointCloud, threshold: f32, iterations: usize) -> (Pl
             best_plane_size = plane_size;
         }
     }
+    let arr = Array2::from_shape_vec(
+        (best_plane_size, 3),
+        point_in_best_plane
+            .iter()
+            .flat_map(|p| vec![p.x, p.y, p.z])
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    let centroid = arr.mean_axis(Axis(0)).unwrap();
+    let centered = arr - &centroid;
+    let cov = centered.t().dot(&centered) / (best_plane_size as f32);
+    let svd = cov.svd(true, true).unwrap();
+    let u = svd.0.unwrap();
+    let normal = u.column(2);
+    println!("{:?}", normal);
     (best_plane, point_in_best_plane)
 }
